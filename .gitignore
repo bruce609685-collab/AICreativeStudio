@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+
+# 运行时产物（源码仓库不入库）
+data/
+logs/
+image/
+video/
+voice/
+
+# 制式脚本（用户智能导入生成的脚本不入库；7 个官方示例脚本放行入库，API_KEY 均已置空）
+scripts/image_scripts/*
+scripts/video_scripts/*
+scripts/audio_scripts/*
+!scripts/image_scripts/*.py
+!scripts/video_scripts/*.py
+!scripts/audio_scripts/*.py
+!scripts/**/.gitkeep
+
+# 截图走查
+tests/screenshots/
+
+# PyInstaller 构建产物（spec 打包配置放行入库）
+build/
+dist/
+dist_*/
+build_*/
+packaging/version_info.txt
+packaging/__pycache__/
+
+# IDE
+.idea/
+.vscode/
+
+# 工作记忆与本地交付物（不入库）
+.workbuddy/
+*.zip
+
+# 个人工作文档（不入库）
+问题收集.md
+AI影音创造工坊-*.md

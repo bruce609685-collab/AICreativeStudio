@@ -34,13 +34,13 @@ class GenerateWorker(QThread):
     # 信号：脚本执行失败，参数 RunResult（ok=False，含 code/message）
     finished_err = Signal(object)
 
-    def __init__(self, script_path, params_json, timeout: float = 300.0,
+    def __init__(self, script_path, params_json, timeout: float = 360.0,
                  parent=None) -> None:
         """记录脚本路径、参数文件与超时。
 
         参数：
             script_path: 脚本绝对路径；params_json: 任务参数 JSON 文件路径；
-            timeout: 脚本执行超时秒数（默认 300）。
+            timeout: 脚本执行超时秒数（默认 360：脚本预算 300 + 60 秒安全余量）。
         """
         super().__init__(parent)
         self._script = script_path

@@ -303,21 +303,6 @@ class ImportPage(QWidget):
     # 小控件
     # ------------------------------------------------------------------
 
-    def _field(self, label: str, value: str) -> QWidget:
-        """构建"标签 + 输入框"的小单元（备用辅助控件）。
-
-        参数：label: 标签文字；value: 输入框初始值。
-        返回：组装好的 QWidget。
-        """
-        cell = QWidget()
-        v = QVBoxLayout(cell)
-        v.setContentsMargins(0, 0, 0, 0)
-        v.setSpacing(2)
-        v.addWidget(self._mini_label(label))
-        self._llm_url = QLineEdit(value)
-        v.addWidget(self._llm_url)
-        return cell
-
     def _mini_label(self, text: str) -> QLabel:
         """构建小号加粗标签。
 

@@ -37,12 +37,18 @@ class _Cell(QFrame):
         self._enabled = enabled
         self._pix: QPixmap | None = None
         self._image_path = ""   # 该格当前显示的图片路径（点击打开用）
+        self._selected = False  # 当前是否选中（重建样式时用）
+        # 基础样式（占位渐变 + 禁用半透明）只算一次并缓存：
+        # 早期实现每次 set_selected 都往 styleSheet 上追加字符串，
+        # 反复点击会让样式表无限增长（既浪费内存，也让 Qt 反复重新解析样式）。
+        # 边框颜色是唯一会变的部分，由 set_selected 动态拼接。
+        self._base_style = (
+            f"background:{_PLACEHOLDER_STYLES[index % 6]};"
+            + ("" if enabled else " opacity:0.2;")
+        )
         # 启用格显示手型光标，禁用格普通箭头
         self.setCursor(Qt.CursorShape.PointingHandCursor if enabled
                        else Qt.CursorShape.ArrowCursor)
-        self.setStyleSheet(
-            f"border:1px solid rgba(0,0,0,0.1); background:{_PLACEHOLDER_STYLES[index % 6]};"
-        )
         lay = QGridLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
         # 占位文字（"图 1"），禁用格不显示
@@ -58,8 +64,6 @@ class _Cell(QFrame):
         self._img_label.setStyleSheet("border:none;")
         self._img_label.hide()
         lay.addWidget(self._img_label, 0, 0)  # 与占位 label 同格叠放
-        if not enabled:
-            self.setStyleSheet(self.styleSheet() + " opacity:0.2;")
         self.set_selected(False)
 
     # ------------------------------------------------------------------
@@ -110,10 +114,13 @@ class _Cell(QFrame):
     def set_selected(self, selected: bool) -> None:
         """切换选中态边框颜色：选中蓝色，未选半透明黑。
 
+        每次都从缓存的基础样式重建（而非追加），避免样式表无限增长。
+
         参数：selected: 是否选中。
         """
+        self._selected = selected
         color = "#0078d4" if selected else "rgba(0,0,0,0.1)"
-        self.setStyleSheet(self.styleSheet() + f"border:1px solid {color};")
+        self.setStyleSheet(f"border:1px solid {color};" + self._base_style)
 
     def mousePressEvent(self, event) -> None:  # noqa: N802（Qt 命名）
         """左键点击：全格取消选中 → 自身选中 → 向上找到 PreviewGrid 发信号。"""

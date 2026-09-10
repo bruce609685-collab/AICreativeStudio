@@ -118,7 +118,9 @@ def _sanitize_filename(name: str) -> str:
     Returns:
         形如 "demo_mock_t2i.py" 的安全文件名。
     """
-    name = re.sub(r"[^\w\u4e00-\u9fff-]+", "_", name.strip()).strip("_")
+    # 先去掉 LLM 可能已带上的 .py 后缀，避免洗成 "xxx_py.py"
+    name = re.sub(r"\.py$", "", name.strip(), flags=re.IGNORECASE)
+    name = re.sub(r"[^\w\u4e00-\u9fff-]+", "_", name).strip("_")
     if not name:
         name = "imported_script"
     return name.lower() + ".py"
@@ -164,6 +166,10 @@ _DEFAULT_CAPS: dict[str, list[str]] = {
         "# formats       = wav,mp3",
     ],
 }
+
+# 允许做"中文/范围值"垃圾检测的纯枚举字段（其余字段值形态自由，不检测）
+_ENUM_CAP_FIELDS: frozenset[str] = frozenset(
+    {"resolutions", "ratios", "qualities", "formats", "modes"})
 
 # 布尔能力字段检测：脚本代码中引用以下参数 → 自动注入 true
 _BOOL_CAP_PATTERNS: dict[str, list[str]] = {
@@ -316,8 +322,12 @@ def _inject_default_caps(code: str, category: str) -> str:
     Returns:
         补全后的代码；没有 META 结束标记或无字段可补时原样返回。
     """
-    # 列表类字段的值有效性检测：不能含中文、不能是范围描述
-    def _is_garbage(val: str) -> bool:
+    # 枚举类字段的值有效性检测：不能含中文、不能是范围描述。
+    # 只对纯枚举字段生效——display_name（中文名）、voices（中文音色）、
+    # durations（本身就是 "2-15" 范围）等字段天然含中文/范围，不能误判。
+    def _is_garbage(field: str, val: str) -> bool:
+        if field not in _ENUM_CAP_FIELDS:
+            return False
         # 值里出现中文字符 → 大概率是 LLM 写的描述文字而非枚举值
         if any('\u4e00' <= c <= '\u9fff' for c in val):
             return True
@@ -327,23 +337,30 @@ def _inject_default_caps(code: str, category: str) -> str:
         return False
 
     meta_end = "# [ACS_META_END]"
+    meta_start = "# [ACS_META_START]"
     if meta_end not in code:
         return code
 
-    # 1. 扫描已有字段，收集垃圾行并移除
+    # 1. 只扫描 META 块内的字段行，收集垃圾行并移除；块外的
+    #    "# 超时 = 30秒" 之类普通注释一律原样保留
     lines = code.splitlines(keepends=True)
     clean_lines: list[str] = []
     existing_valid: set[str] = set()
     garbage_fields: list[str] = []
+    in_meta = meta_start not in code   # 没有起始标记时退化为全文扫描
     for line in lines:
         line_s = line.strip()
-        if line_s.startswith("#") and "=" in line_s:
+        if line_s == meta_start:
+            in_meta = True
+        elif line_s == meta_end:
+            in_meta = False
+        elif in_meta and line_s.startswith("#") and "=" in line_s:
             after = line_s.lstrip("#").strip()
             if "=" in after:
                 field, _, val = after.partition("=")
                 field = field.strip()
                 val = val.strip()
-                if _is_garbage(val):
+                if _is_garbage(field, val):
                     garbage_fields.append(field)
                     logger.info("移除垃圾值：%s = %s", field, val)
                     continue  # 跳过垃圾行，稍后注入默认值

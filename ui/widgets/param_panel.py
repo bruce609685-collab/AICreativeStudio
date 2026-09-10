@@ -117,6 +117,9 @@ class KeyWarnBar(QFrame):
         lay = QHBoxLayout(self)
         lay.setContentsMargins(8, 5, 8, 5)
         self._label = QLabel(self.TEXT)
+        # 警告文字较长（含环境变量名），必须允许换行——否则窄窗口下被截断，
+        # 用户看不到"去哪里填 KEY"这个关键信息
+        self._label.setWordWrap(True)
         lay.addWidget(self._label)
         self.hide()
 

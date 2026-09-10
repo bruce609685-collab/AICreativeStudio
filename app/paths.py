@@ -58,6 +58,7 @@ AUDIO_SCRIPTS_DIR = SCRIPTS_DIR / "audio_scripts"
 TEMPLATES_DIR = RESOURCE_DIR / "templates"
 DATA_DIR = BASE_DIR / "data"
 LOGS_DIR = BASE_DIR / "logs"
+CACHE_DIR = DATA_DIR / "cache"   # 运行期缓存（如界面图标 PNG）
 
 # 文件
 CONFIG_FILE = DATA_DIR / "config.json"
@@ -79,7 +80,7 @@ def ensure_dirs() -> None:
     """
     for d in (
         SCRIPTS_DIR, IMAGE_SCRIPTS_DIR, VIDEO_SCRIPTS_DIR, AUDIO_SCRIPTS_DIR,
-        TEMPLATES_DIR, DATA_DIR, JOBS_DIR, LOGS_DIR,
+        TEMPLATES_DIR, DATA_DIR, JOBS_DIR, LOGS_DIR, CACHE_DIR,
         OUTPUT_IMAGE_DIR, OUTPUT_VIDEO_DIR, OUTPUT_AUDIO_DIR,
     ):
         d.mkdir(parents=True, exist_ok=True)

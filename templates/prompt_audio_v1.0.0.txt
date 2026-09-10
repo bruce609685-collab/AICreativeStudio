@@ -24,7 +24,8 @@
 2. 含 API_KEY 常量：API_KEY = ""  ← 必须置空（安全要求，禁止填入任何真实密钥）
 3. 命令行入口：argparse 接收 --params <job.json>，JSON 键名（契约 §2）：
    prompt / voice / style / format / output_dir / mock / timeout
-   调用上游 API 时请使用 params["timeout"] 作为请求超时（秒），推荐 300 秒。
+   调用上游 API 时请使用 params["timeout"] 作为请求超时（秒）。
+   它是整个任务的总预算，由外壳下发，语音类默认 300 秒。
 4. 结束时向 stdout 打印一行结果 JSON：
    {"status":"ok","files":["绝对路径"],"elapsed":秒}
    {"status":"error","code":"AUTH_FAILED|INVALID_PARAMS|API_ERROR|NETWORK|BLOCKED|INTERNAL","message":"..."}
@@ -32,9 +33,15 @@
    产出占位语音（WAV），并照常输出 ok 结果。
 6. 优先使用标准库（urllib / json / base64 / wave / struct / zlib）；
    确需第三方库时在文件顶部注释「依赖安装：pip install xxx」。
-7. 超时处理：
-   - 调用上游 API 时设置合理超时，推荐 300 秒
-   - 超时网络错误应转为 NETWORK 错误码输出，不得崩溃
+7. 超时处理（**重要：写错会导致任务被误判为超时失败**）：
+   - params["timeout"] 是**整个任务的总预算**（提交 + 轮询 + 下载合计），
+     不是每个请求各拿一份。请先算出截止时刻 deadline = 当前时间 + timeout，
+     之后每次网络请求都用「剩余预算 = deadline - 当前时间」作为本次超时
+   - **严禁**给单次请求设置远小于总预算的硬性上限（例如 min(30, timeout)）。
+     上游大模型接口单次响应常需 30~60 秒，给单次请求 30 秒必然误报超时
+   - 异步任务（创建 → 轮询 → 下载）的「提交请求」同样不得设短上限，
+     提交、轮询、下载三阶段共享同一份总预算
+   - 超时网络错误应转为 `NETWORK` 错误码输出，不得崩溃
 8. 错误码使用规范：
    - **INVALID_PARAMS**：仅用于脚本入参校验失败（如 params 文件缺失或格式错误），不得用于 API 返回错误
    - **API_ERROR**：API 返回非 200 状态码、返回空响应体、或响应体 JSON 解析失败时使用

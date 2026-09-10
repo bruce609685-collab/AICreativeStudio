@@ -50,7 +50,7 @@ def test_imports() -> None:
     )
 
     assert about.APP_ID == "AICreativeStudio"
-    assert about.APP_VERSION == "0.3"
+    assert about.APP_VERSION == "0.5.1"
     assert enums.MediaCategory.IMAGE.value == "image"
     assert models.ScriptMeta().template_version == "1.0.0"
     assert fields.TEMPLATE_VERSION == "1.0.0"
@@ -90,7 +90,10 @@ def test_main_window_construction() -> None:
     db = HistoryDatabase(paths.DATA_DIR / "test_smoke_history.db")
     win = MainWindow(registry, db)
     assert win.tab_widget.count() == 6
-    assert win.tab_widget.tabText(0).strip().startswith("🖼")
+    # 页签图标由 icons.symbol_icon 渲染成 QIcon（文本不再带 emoji 前缀，
+    # 因为符号字形依赖系统字体，直接写文本会变豆腐块）。
+    assert not win.tab_widget.tabIcon(0).isNull()
+    assert win.tab_widget.tabText(0).strip() == "AI生图片"
     # 脚本数量随导入增长，改为动态断言（≥3 个预置脚本）
     assert "脚本：" in win.status_right_text
     db.close()

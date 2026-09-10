@@ -90,6 +90,12 @@ def run_script_only() -> int:
     parser.add_argument("--params")
     args, _ = parser.parse_known_args()
 
+    # 缺 --run-script / --params 时按契约输出错误 JSON，而不是 Path(None) 崩溃
+    if not args.run_script or not args.params:
+        err = {"status": "error", "code": "INTERNAL",
+               "message": "缺少 --run-script 或 --params 参数"}
+        print(json.dumps(err, ensure_ascii=False))
+        return 1
     script_path = Path(args.run_script)
     params_path = Path(args.params)
 
@@ -113,7 +119,7 @@ def run_script_only() -> int:
     sys.argv = [str(script_path), "--params", str(params_path)]
     try:
         # compile + exec 相当于把脚本文件当作 main 程序跑一遍；
-        # errors="replace" 让读取含坏字节的文件也不崩（坏字节替换为 �）
+        # errors="replace" 让读取含坏字节的文件也不崩（坏字节替换为 U+FFFD）
         code = compile(script_path.read_text(encoding="utf-8", errors="replace"),
                        str(script_path), "exec")
         exec(code, {"__name__": "__main__", "__file__": str(script_path)})

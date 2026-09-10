@@ -222,9 +222,10 @@ class AudioPage(QWidget):
         # 按钮：打开输出目录 / 播放当前产物
         actions = QHBoxLayout()
         actions.setSpacing(5)
-        dl = QPushButton("⬇ 打开文件夹")
+        # 文案修正：这两个按钮都是"打开"而非"下载"，用文件夹/播放图标更准确
+        dl = QPushButton("📁 打开文件夹")
         dl.clicked.connect(self._open_output_dir)
-        op = QPushButton("📁 播放产物")
+        op = QPushButton("▶ 系统播放")
         op.clicked.connect(self._player.open_external)
         for b in (dl, op):
             b.setStyleSheet("padding:5px 0px;")

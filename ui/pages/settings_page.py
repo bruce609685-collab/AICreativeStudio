@@ -23,12 +23,13 @@ from PySide6.QtCore import QUrl, Qt
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QFrame, QGroupBox, QHBoxLayout, QLabel, QMessageBox, QPlainTextEdit,
-    QPushButton, QScrollArea, QSplitter, QVBoxLayout, QWidget,
+    QPushButton, QScrollArea, QSizePolicy, QSplitter, QVBoxLayout, QWidget,
 )
 
 from app import paths
 from core import keys
 from core.registry import ScriptRegistry, scan_scripts_dir
+from ui.icons import symbol_icon
 from ui.widgets import KeyInputPanel
 
 # 类型徽标配色（按"图片/视频/语音"分类着色）
@@ -212,23 +213,30 @@ class SettingsPage(QWidget):
         row.setContentsMargins(7, 0, 7, 0)
         row.setSpacing(4)
 
-        add = QPushButton("＋ 新增")
+        # 文案去掉符号前缀（图标由 setIcon 提供，避免"图标+字符"重复）
+        add = QPushButton("新增")
         add.setStyleSheet("font-size:11px; padding:2px 9px;")
         # 信号槽：点新增 → 跳转到智能导入页（§3.4"引导走智能导入"）
         add.clicked.connect(lambda: self._main.switch_tab(self._main.TAB_IMPORT))
-        dele = QPushButton("✕ 删除")
+        dele = QPushButton("删除")
         dele.setProperty("class", "danger")
         dele.setStyleSheet("font-size:11px; padding:2px 9px;")
         dele.clicked.connect(self._confirm_delete)
         sep = QFrame()
         sep.setFixedSize(1, 13)
         sep.setStyleSheet("background:#d4d4d4; border:none;")
-        folder = QPushButton("📁 脚本目录")
+        folder = QPushButton("脚本目录")
         folder.setStyleSheet("font-size:11px; padding:2px 9px;")
         folder.clicked.connect(self._open_scripts_dir)
-        refresh = QPushButton("🔄 刷新")
+        refresh = QPushButton("刷新")
         refresh.setStyleSheet("font-size:11px; padding:2px 9px;")
         refresh.clicked.connect(self._refresh)
+        # 按钮图标统一走 icons.symbol_icon 渲染（避免符号变方块）
+        # 注：这里用 U+271A（✚）而非全角"＋"（U+FF0B）——实测系统字体
+        # 均无全角加号字形，渲染出来会是空心方块。
+        for btn, symbol in ((add, "✚"), (dele, "✕"), (folder, "📁"),
+                            (refresh, "🔄")):
+            btn.setIcon(symbol_icon(symbol, "#333333", 28))
         self._count_label = QLabel("共 0 个脚本")
         self._count_label.setStyleSheet("font-size:11px; color:#888; border:none;")
 
@@ -305,6 +313,9 @@ class SettingsPage(QWidget):
         self._key_panel = KeyInputPanel()
         # 信号槽：点确定 → 调 core/keys 写入 KEY
         self._key_panel.key_confirmed.connect(self._confirm_key)
+        # 面板只占内容高度：代码区折叠时不跟着被拉伸（原实现会散成大段空白）
+        self._key_panel.setSizePolicy(
+            QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
         v.addWidget(self._key_panel)
 
         # 折叠条：展开/收起代码编辑区 + 保存按钮
@@ -336,6 +347,12 @@ class SettingsPage(QWidget):
         )
         self._code.hide()
         v.addWidget(self._code, stretch=1)
+        # 代码区折叠时用占位区吸收剩余高度，让底部状态栏始终贴住窗口下沿
+        # （原来剩余空间由 KEY 面板吸收，导致面板被撑开、底部状态栏悬在半空）
+        self._code_spacer = QWidget()
+        self._code_spacer.setSizePolicy(
+            QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
+        v.addWidget(self._code_spacer, stretch=1)
 
         # 底部状态栏：KEY 是否已填写
         foot = QWidget()
@@ -495,9 +512,14 @@ class SettingsPage(QWidget):
     # ------------------------------------------------------------------
 
     def _toggle_code(self) -> None:
-        """展开/收起代码编辑区，按钮文字与保存按钮同步显隐。"""
+        """展开/收起代码编辑区，按钮文字与保存按钮同步显隐。
+
+        代码区与占位区互斥显示：展开时代码区吃满剩余高度，
+        折叠时由占位区吸收，底部状态栏始终贴住窗口下沿。
+        """
         self._code_open = not self._code_open
         self._code.setVisible(self._code_open)
+        self._code_spacer.setVisible(not self._code_open)
         self._fold_btn.setText("▼ 折叠脚本代码" if self._code_open else "▶ 展开脚本代码")
         self._save_btn.setVisible(self._code_open)
 

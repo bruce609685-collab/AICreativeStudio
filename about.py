@@ -11,13 +11,15 @@
 
 # 程序对外显示的名字（用户在窗口标题栏、"关于"页面看到的名字）
 APP_NAME = "AI Creative Studio"          # 窗口标题 / 关于页显示名
+# 程序中文名（"关于"页展示用：中文名 + 英文名并列，避免出现重复的同一串名字）
+APP_NAME_CN = "AI 创意工坊"
 # 程序内部标识（不带空格和版本号）：用于进程名、单实例锁名、日志文件名等
 # 技术场景——因为带空格/版本号的名字在这些场景容易出问题
 APP_ID = "AICreativeStudio"              # 进程名 / 单实例锁名 / 日志文件名（英文，无版本号）
 # 语义化版本号：主版本.次版本.修订号
-APP_VERSION = "0.3"
+APP_VERSION = "0.5.1"
 # 本次构建（打包）的日期，方便追溯问题出现在哪个版本
-BUILD_DATE = "2026-09-04"
+BUILD_DATE = "2026-09-10"
 AUTHOR = "AI Creative Team"
 # 项目发布页链接，供用户获取新版本
 RELEASE_URL = "https://github.com/bruce609685-collab/AICreativeStudio"

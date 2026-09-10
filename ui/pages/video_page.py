@@ -252,9 +252,10 @@ class VideoPage(QWidget):
         # 按钮：打开输出目录 / 播放当前产物（系统播放器）
         actions = QHBoxLayout()
         actions.setSpacing(5)
-        dl = QPushButton("⬇ 打开文件夹")
+        # 文案修正：这两个按钮都是"打开"而非"下载"，用文件夹/播放图标更准确
+        dl = QPushButton("📁 打开文件夹")
         dl.clicked.connect(self._open_output_dir)
-        op = QPushButton("📁 播放产物")
+        op = QPushButton("▶ 系统播放")
         op.clicked.connect(self._player.open_external)
         for b in (dl, op):
             b.setStyleSheet("padding:5px 0px;")
@@ -419,7 +420,8 @@ class VideoPage(QWidget):
         self._main.show_status("生成中，请稍候…", 0)
 
         # 后台线程执行脚本，信号跨线程回传 UI 线程更新界面
-        worker = GenerateWorker(self._script_abs_path(meta), job_file, parent=self)
+        # 视频生成耗时长：脚本内部预算 600 秒，外壳留 60 秒余量后再强杀
+        worker = GenerateWorker(self._script_abs_path(meta), job_file, timeout=660.0, parent=self)
         worker.finished_ok.connect(self._on_gen_ok)      # 成功 → 播放器加载产物
         worker.finished_err.connect(self._on_gen_err)    # 失败 → 显示错误
         worker.finished.connect(worker.deleteLater)      # 线程结束自动释放

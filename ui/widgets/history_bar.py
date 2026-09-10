@@ -33,17 +33,23 @@ _PLACEHOLDER = [
 ]
 
 
-def _record_label(record: dict, index: int) -> str:
+def _record_label(record: dict, index: int, prefer_prompt: bool = False) -> str:
     """历史条名称：优先取脚本名，缺省用提示词截断。
 
-    参数：record: 历史记录字典；index: 记录索引。
+    参数：
+        record: 历史记录字典；
+        index: 记录索引；
+        prefer_prompt: 优先用提示词当名称（语音页用——同一脚本会产出
+            多条记录，只显示脚本名会全部一样，看不出内容差异）。
     返回：显示用的短名称。
     """
+    prompt = record.get("prompt", "") or ""
+    if prefer_prompt and prompt:
+        return prompt[:12] + "…" if len(prompt) > 12 else prompt
     name = record.get("script_key", "") or ""
     if name:
         # "image_scripts/grok_3_image.py" → "grok_3_image"
         return name.rsplit("/", 1)[-1].replace(".py", "")
-    prompt = record.get("prompt", "") or ""
     return prompt[:10] + "…" if len(prompt) > 10 else prompt
 
 
@@ -56,6 +62,18 @@ class _ClickableCell(QFrame):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self.clicked_callback = None   # 点击回调（宿主设置）
+        self.base_style = ""           # 基础样式（背景渐变等），选中时重建用
+
+    def set_border(self, color: str) -> None:
+        """按给定颜色重建边框，保留基础背景样式。
+
+        早期实现用 styleSheet().split("border:") 从当前样式里"抠"出前缀，
+        一旦样式串里先出现别的 border 片段就会把背景色整段丢掉
+        （表现为选中历史缩略图后背景变白）。改为缓存基础样式后重建。
+
+        参数：color: 边框颜色（如 "#0078d4"）。
+        """
+        self.setStyleSheet(f"border:1px solid {color}; {self.base_style}")
 
     def mousePressEvent(self, event) -> None:  # noqa: N802（Qt 命名）
         """左键点击 → 触发宿主注入的回调（Qt 事件回调，规范子类化）。"""
@@ -151,7 +169,9 @@ class HistoryStrip(QWidget):
             style = _PLACEHOLDER[index % 6]
             if not ok:
                 style += "; opacity:0.25;"
-            cell.setStyleSheet(f"border:1px solid #d4d4d4; background:{style};")
+            # 缓存基础样式（背景），选中/取消选中时由 set_border 重建边框
+            cell.base_style = f"background:{style};"
+            cell.setStyleSheet(f"border:1px solid #d4d4d4; {cell.base_style}")
 
             # 真实缩略图：成功记录且产物存在时，叠加显示缩放后的图片
             # （叠放于色块之上；路径失效/加载失败则保留占位色块，不影响显示。
@@ -237,12 +257,9 @@ class HistoryStrip(QWidget):
             for i in range(self._strip.count() - 1)
         ]
         for i, w in enumerate(widgets):
-            if isinstance(w, QFrame):
-                color = "#0078d4" if i == index else "#d4d4d4"
-                w.setStyleSheet(
-                    w.styleSheet().split("border:")[0]
-                    + f"border:1px solid {color};"
-                )
+            # 仅图片模式的可点击格需要换边框（视频模式是普通 QFrame 包装层）
+            if hasattr(w, "set_border"):
+                w.set_border("#0078d4" if i == index else "#d4d4d4")
 
 
 class HistoryTable(QTableWidget):
@@ -283,7 +300,7 @@ class HistoryTable(QTableWidget):
         """
         self._records = list(records)
         rows = []
-        for r in self._records:
+        for i, r in enumerate(self._records):
             ok = bool(r.get("ok"))
             dur = ""
             files = r.get("files") or []
@@ -297,7 +314,11 @@ class HistoryTable(QTableWidget):
                 except (wave.Error, OSError, IndexError):
                     dur = ""
             meta = f"{dur} · 成功" if ok else f"失败 · {r.get('code', '')}"
-            rows.append({"name": _record_label(r, 0), "meta": meta, "ok": ok})
+            # 语音页同一脚本会产生多条记录，名称优先用提示词区分内容
+            rows.append({
+                "name": _record_label(r, i, prefer_prompt=True),
+                "meta": meta, "ok": ok,
+            })
 
         # 填充表格
         self.setRowCount(len(rows))

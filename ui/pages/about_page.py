@@ -64,6 +64,19 @@ class _PipWorker(QThread):
 
 # 更新日志数据：(版本, 日期, [更新条目...])
 CHANGELOG = [
+    ("v0.5.1", "2026-09-10", [
+        "修复视频生成超时：提交请求上限 30 秒→120 秒、轮询单次上限 30 秒→60 秒",
+        "视频任务改为全局预算制：总预算放宽到 600 秒，外壳强杀上限同步提到 660 秒",
+    ]),
+    ("v0.5", "2026-09-10", [
+        "修复 9 处底层缺陷：导入脚本中文名丢失、文件名双 .py、配置多余键崩溃、FFmpeg 路径与下载进度、历史库跨线程写入等",
+        "补齐进度条 / 滑块 / 工具提示 / 右键菜单 / 分隔条的统一浅色样式",
+        "修复「关于 → 安装依赖项」误列 none 假依赖（pip 占位词清洗），纠正依赖说明文案",
+    ]),
+    ("v0.4", "2026-09-09", [
+        "界面美化：页签图标化、复选框对勾、浅色滚动条，修复图标显示成方块的问题",
+        "修复主按钮「白字白底看不见」等 9 处界面缺陷，视频播放提示条恢复显示",
+    ]),
     ("v0.3", "2026-09-04", [
         "使用 Kimi K3 和 GLM-5.3 进行重构，首个公开版本",
     ]),
@@ -164,8 +177,9 @@ class AboutPage(QWidget):
         """
         card = QGroupBox("程序信息")
         v = QVBoxLayout(card)
+        # 程序名称：中文名 + 英文名并列（原写法把同一个英文名写了两遍）
         rows = [
-            ("程序名称", f"{about.APP_NAME}（AI Creative Studio）"),
+            ("程序名称", f"{about.APP_NAME_CN}（{about.APP_NAME}）"),
             ("当前版本", about.APP_VERSION),
             ("构建日期", about.BUILD_DATE),
         ]
@@ -229,8 +243,8 @@ class AboutPage(QWidget):
         card = QGroupBox("安装依赖项")
         v = QVBoxLayout(card)
         intro = QLabel(
-            "安装脚本或播放所需的第三方组件。内嵌库（requests / httpx / Pillow）"
-            "一般无需安装。扫描脚本「pip_requires」字段自动列出缺失包。"
+            "安装脚本或播放所需的第三方组件。脚本默认只依赖 Python 标准库；"
+            "若某脚本声明了额外第三方包，会在下方自动列出并可一键安装。"
         )
         intro.setStyleSheet("font-size:12px; color:#666;")
         intro.setWordWrap(True)
@@ -268,10 +282,10 @@ class AboutPage(QWidget):
             )
             v.addWidget(item)
 
-        # 内嵌库：随程序提供，无需安装（按钮禁用）
+        # 标准库说明：脚本默认只用标准库，无需安装（按钮禁用）
         v.addWidget(self._build_dep_item(
-            "requests / httpx / Pillow",
-            QLabel("已随程序提供（内嵌）"),
+            "Python 标准库",
+            QLabel("脚本默认仅依赖标准库，无需安装"),
             "无需安装",
             enabled=False,
         ))
@@ -291,8 +305,11 @@ class AboutPage(QWidget):
         返回：依赖项 QFrame。
         """
         item = QFrame()
+        # 用 #objectName 限定作用范围：Qt 里不带选择器的样式表会级联到所有子控件，
+        # 把子按钮（class=primary）的蓝色渐变背景盖成浅灰，导致白字白底看不见。
+        item.setObjectName("depItem")
         item.setStyleSheet(
-            "background:#f6f8fa; border:1px solid #e0e0e0; border-radius:1px;"
+            "#depItem{background:#f6f8fa; border:1px solid #e0e0e0; border-radius:1px;}"
         )
         h = QHBoxLayout(item)
         h.setContentsMargins(10, 9, 10, 9)

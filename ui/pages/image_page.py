@@ -287,9 +287,10 @@ class ImagePage(QWidget):
         # 底部两个按钮：打开最近产物 / 打开整个图片输出目录
         actions = QHBoxLayout()
         actions.setSpacing(6)
-        dl = QPushButton("📁 打开产物")
+        # 文案区分：左边打开"本次产物所在目录"，右边打开"图片输出根目录"
+        dl = QPushButton("📂 本次产物")
         dl.clicked.connect(self._open_last_output)
-        open_btn = QPushButton("⬇ 打开文件夹")
+        open_btn = QPushButton("📁 输出目录")
         open_btn.clicked.connect(self._open_output_dir)
         for b in (dl, open_btn):
             b.setStyleSheet("padding:5px 0px;")

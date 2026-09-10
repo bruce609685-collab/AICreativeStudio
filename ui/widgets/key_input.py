@@ -24,7 +24,11 @@ class KeyInputPanel(QWidget):
     key_confirmed = Signal(str)
 
     def __init__(self, parent=None) -> None:
-        """构建面板：元信息两行 + 标题行 + 输入行。"""
+        """构建面板：元信息两行 + 标题行 + 输入行。
+
+        面板本身内容不多，末尾加一条伸缩把内容顶到上方——否则在设置页
+        右栏（代码区折叠时）会被纵向拉伸，标签与输入框之间出现巨大空隙。
+        """
         super().__init__(parent)
         outer = QVBoxLayout(self)
         outer.setContentsMargins(12, 10, 12, 10)
@@ -69,6 +73,7 @@ class KeyInputPanel(QWidget):
         title_row.addStretch(1)
         outer.addLayout(title_row)
         outer.addLayout(row)
+        outer.addStretch(1)   # 内容顶到上方，避免被纵向拉伸后间距过大
 
     # ------------------------------------------------------------------
 

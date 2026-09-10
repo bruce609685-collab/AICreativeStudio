@@ -25,6 +25,8 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
+from contract.fields import normalize_pip_requires
+
 logger = logging.getLogger(__name__)
 
 # 路径常量（内联，避免触发 app/__init__.py 的循环导入）
@@ -91,14 +93,31 @@ def list_missing(scripts_pip_requires: list[str]) -> list[str]:
     """
     seen: set[str] = set()
     missing: list[str] = []
-    for pkg in scripts_pip_requires:
-        pkg = pkg.strip().lower()
-        if not pkg or pkg in seen:
+    # 入口再洗一遍：兼容未经过契约层清洗的调用方（如外部直接
+    # 构造 ScriptMeta），确保 none 这类占位词不会进界面变成可点假包
+    for pkg in normalize_pip_requires(scripts_pip_requires):
+        if pkg in seen:
             continue
         seen.add(pkg)
         if not _check_pip_installed(pkg):
             missing.append(pkg)
     return sorted(missing)
+
+
+def _resolve_python() -> str | None:
+    """找一个真正带 pip 模块的 Python 解释器。
+
+    开发态直接用当前解释器；PyInstaller 打包后 sys.executable 是主程序 exe，
+    里面没有 pip 模块，`exe -m pip` 必失败——此时退而在系统 PATH 里找
+    python / py 启动器。找不到返回 None，由调用方给出友好提示。
+    """
+    if not getattr(sys, "frozen", False):
+        return sys.executable
+    for cand in ("python", "python3", "py"):
+        found = shutil.which(cand)
+        if found:
+            return found
+    return None
 
 
 def install_pip(package: str) -> bool:
@@ -110,11 +129,21 @@ def install_pip(package: str) -> bool:
     Returns:
         安装成功返回 True。
     """
-    python_exe = sys.executable
+    # 防御：只有合法且非占位的包名才允许进 pip，避免拼错或占位词
+    # 被真的执行成 pip install（pip install none 会装到无关包或报错）
+    if not normalize_pip_requires([package]):
+        logger.warning("拒绝安装非法 pip 包名：%r", package)
+        return False
+    package = package.strip().lower()
+    python_exe = _resolve_python()
+    if python_exe is None:
+        logger.warning("pip install %s 失败：打包环境内无可用 Python/pip，"
+                "请在系统安装 Python 3 后重试", package)
+        return False
     try:
         # 走清华镜像安装（§10.7），下载更快更稳
         result = subprocess.run(
-            [python_exe, "-m", "pip", "install", package.strip().lower(),
+            [python_exe, "-m", "pip", "install", package,
              *PIP_MIRROR_ARGS],
             capture_output=True, text=True, timeout=120.0,
         )
@@ -148,8 +177,10 @@ def check_ffmpeg() -> bool:
     if FFMPEG_DIR.is_dir():
         for exe in FFMPEG_DIR.rglob("ffmpeg.exe"):
             if exe.is_file():
-                os.environ.setdefault("PATH",
-                                      os.pathsep.join([str(exe.parent), os.environ.get("PATH", "")]))
+                # PATH 在 Windows 上恒存在，setdefault 永远不会写入；
+                # 必须显式前置追加，后续 shutil.which / subprocess 才能找到
+                os.environ["PATH"] = os.pathsep.join(
+                    [str(exe.parent), os.environ.get("PATH", "")])
                 return True
     return False
 
@@ -181,17 +212,19 @@ def download_ffmpeg(progress_cb=None) -> bool:
         """下载进度上报器。
 
         urllib 的 urlretrieve 每收到一块数据就调用一次 __call__，
-        这里把"块数 × 块大小"累加成已下载字节数，再转交给外部
-        传入的 progress_cb 回调（界面层用它刷新进度条）。
+        其中 count 是**累计**块数（不是本次增量），所以已下载字节数
+        = count × block_size 直接赋值即可，不能再累加（否则进度会
+        呈平方增长、瞬间超过 100%）。
         """
 
         def __init__(self, cb):
             self._cb = cb
-            self._downloaded = 0
 
         def __call__(self, count, block_size, total_size):
-            self._downloaded += count * block_size
-            self._cb(self._downloaded, total_size or 1)
+            downloaded = count * block_size
+            if total_size and total_size > 0:
+                downloaded = min(downloaded, total_size)
+            self._cb(downloaded, total_size if total_size and total_size > 0 else 1)
 
     try:
         logger.info("开始下载 FFmpeg…")

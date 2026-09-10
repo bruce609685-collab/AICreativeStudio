@@ -15,6 +15,7 @@ from PySide6.QtWidgets import QLabel, QMainWindow, QTabWidget, QWidget
 import about
 from core.registry import ScriptRegistry
 from core.services import HistoryDatabase
+from ui.icons import symbol_icon
 from ui.pages.about_page import AboutPage
 from ui.pages.audio_page import AudioPage
 from ui.pages.image_page import ImagePage
@@ -68,13 +69,23 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def _build_pages(self) -> None:
-        """六个页签：生图片 / 生视频 / 生语音 / 模型设置 / 智能导入 / 关于。"""
-        self._tabs.addTab(ImagePage(self, self._registry, self._db), "🖼  AI生图片")
-        self._tabs.addTab(VideoPage(self, self._registry, self._db), "🎬  AI生视频")
-        self._tabs.addTab(AudioPage(self, self._registry, self._db), "🎙  AI生语音")
-        self._tabs.addTab(SettingsPage(self, self._registry), "⚙  模型设置")
-        self._tabs.addTab(ImportPage(self, self._registry), "📥  智能导入")
-        self._tabs.addTab(AboutPage(self, self._registry), "ℹ  关于")
+        """六个页签：生图片 / 生视频 / 生语音 / 模型设置 / 智能导入 / 关于。
+
+        图标用 icons.symbol_icon 渲染成图片挂上去，而不是直接写 emoji 字符：
+        Windows 上 Qt 对符号字体的回退不稳定，直接写字符会出现方块（豆腐块）。
+        """
+        pages = [
+            (ImagePage(self, self._registry, self._db), "  AI生图片", "🖼"),
+            (VideoPage(self, self._registry, self._db), "  AI生视频", "🎬"),
+            (AudioPage(self, self._registry, self._db), "  AI生语音", "🎙"),
+            (SettingsPage(self, self._registry), "  模型设置", "⚙"),
+            (ImportPage(self, self._registry), "  智能导入", "📥"),
+            (AboutPage(self, self._registry), "  关于", "ℹ"),
+        ]
+        for page, title, symbol in pages:
+            index = self._tabs.addTab(page, title)
+            # 图标尺寸按页签行高给，32px 渲染足够清晰又不糊
+            self._tabs.setTabIcon(index, symbol_icon(symbol, "#333333", 32))
 
     def _build_status_bar(self) -> None:
         """左：可变状态文本；右：脚本数 / 模板版本 / 程序版本。
@@ -88,12 +99,12 @@ class MainWindow(QMainWindow):
         self._status_label = QLabel(STATUS_READY)
         bar.addWidget(self._status_label)
 
-        # 右侧：常驻信息（脚本数 / 模板版本 / 程序版本）
-        script_count = self._registry.count() if self._registry else 0
-        right = QLabel(f"脚本：{script_count} 个    模板 {about.TEMPLATE_VERSION}    v{about.APP_VERSION}")
+        # 右侧：常驻信息（脚本数 / 模板版本 / 程序版本），用竖线分隔更易读
+        right = QLabel()
         right.setAlignment(Qt.AlignmentFlag.AlignRight)
         bar.addPermanentWidget(right)
         self._status_right = right
+        self.refresh_status_info()   # 统一由这个方法生成文案（避免两处格式不一致）
 
         # 单次定时器：临时消息超时后自动复位为"就绪"
         self._status_timer = QTimer(self)
@@ -107,8 +118,10 @@ class MainWindow(QMainWindow):
         一直显示旧数字；本方法供各页在脚本变动后调用刷新。
         """
         script_count = self._registry.count() if self._registry else 0
+        # 用 " │ " 分隔三段信息，比连续空格更清晰（与 UI 预览稿一致）
         self._status_right.setText(
-            f"脚本：{script_count} 个    模板 {about.TEMPLATE_VERSION}    v{about.APP_VERSION}")
+            f"脚本：{script_count} 个  │  模板 {about.TEMPLATE_VERSION}"
+            f"  │  v{about.APP_VERSION}")
 
     # ------------------------------------------------------------------
     # 对外 API（各页调用）

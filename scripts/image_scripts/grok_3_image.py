@@ -8,6 +8,8 @@
 - 结束时向 stdout 打印一行结果 JSON（ok / error）
 - mock=true 时不发起网络请求，产出渐变占位 PNG（演示/测试/截图用）
 - KEY 优先级：脚本内 API_KEY 常量 → 环境变量 XAI_API_KEY
+- 超时：timeout 是"整个任务总预算"，由外壳下发；严禁给单次请求设
+  远小于总预算的硬性上限（例如写死 timeout=30）
 
 # [ACS_META_START]
 # display_name  = Grok · 文生图（grok-3-image）
@@ -93,8 +95,12 @@ def _resolve_key() -> str:
     return ""
 
 
-def _call_grok(prompt: str, batch: int, ratio: str, resolution: str) -> dict:
-    """POST images/generations，返回响应 JSON；非 200 抛异常带原文。"""
+def _call_grok(prompt: str, batch: int, ratio: str, resolution: str,
+               timeout: float) -> dict:
+    """POST images/generations，返回响应 JSON；非 200 抛异常带原文。
+
+    timeout 为本次请求超时（由外壳按任务总预算下发），不再硬编码。
+    """
     body: dict = {
         "model": MODEL_ID,
         "prompt": prompt,
@@ -115,7 +121,7 @@ def _call_grok(prompt: str, batch: int, ratio: str, resolution: str) -> dict:
         method="POST",
     )
     try:
-        with urllib.request.urlopen(req, timeout=60) as resp:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
             return json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         raw = exc.read().decode("utf-8", errors="replace")
@@ -163,6 +169,16 @@ def main() -> int:
     fmt = _ext_name(str(params.get("format", "png")))
     mock = bool(params.get("mock", False))
 
+    # 请求超时：由外壳按任务总预算下发，缺省 300 秒
+    timeout = 300.0
+    try:
+        if params.get("timeout") not in (None, ""):
+            timeout = float(params.get("timeout"))
+    except (TypeError, ValueError):
+        timeout = 300.0
+    if timeout <= 0:
+        timeout = 300.0
+
     try:
         output_dir.mkdir(parents=True, exist_ok=True)
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -190,7 +206,7 @@ def main() -> int:
                 _emit({"status": "error", "code": "AUTH_FAILED",
                        "message": "API KEY 未配置（脚本内 API_KEY 或环境变量 XAI_API_KEY）"})
                 return 1
-            data = _call_grok(prompt, batch, ratio, resolution)
+            data = _call_grok(prompt, batch, ratio, resolution, timeout)
             items = data.get("data") or []
             if not items:
                 reason = data.get("block_reason", "")

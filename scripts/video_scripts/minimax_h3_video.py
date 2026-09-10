@@ -8,6 +8,8 @@
 - 产物 URL 有实效，脚本必须下载落盘后再回传文件路径
 - mock=true 时不发起网络请求，用 Pillow 产多帧 GIF 动画（真实可播）
 - KEY 优先级：脚本内 API_KEY 常量 → 环境变量 MINIMAX_API_KEY
+- 超时：timeout 是"整个任务总预算"（提交 + 轮询 + 下载合计），由外壳下发；
+  各阶段只允许在剩余预算内取用，严禁给单次请求设远小于总预算的硬性上限
 - 真实接口字段以 MiniMax 开放平台官方文档为准（本脚本为 v1 骨架）
 
 # [ACS_META_START]
@@ -44,8 +46,8 @@ API_KEY = ""  # 由模型设置「确定」写入；为空时回退环境变量 
 
 MODEL_ID = "MiniMax-H3"
 API_BASE = "https://api.minimaxi.com/v1"
-POLL_INTERVAL = 5.0     # 轮询间隔（秒）
-POLL_TIMEOUT = 300.0    # 轮询超时上限（秒）
+POLL_INTERVAL = 5.0      # 轮询间隔（秒）
+DEFAULT_TIMEOUT = 600.0  # 默认总预算（秒）：提交 + 轮询 + 下载共享
 
 
 # ----------------------------------------------------------------------
@@ -102,7 +104,8 @@ def _resolve_key() -> str:
     return os.environ.get("MINIMAX_API_KEY", "").strip()
 
 
-def _request(method: str, url: str, body: dict | None, key: str) -> dict:
+def _request(method: str, url: str, body: dict | None, key: str,
+             timeout: float) -> dict:
     req = urllib.request.Request(
         url,
         data=json.dumps(body).encode("utf-8") if body is not None else None,
@@ -111,7 +114,7 @@ def _request(method: str, url: str, body: dict | None, key: str) -> dict:
         method=method,
     )
     try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
             return json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         raw = exc.read().decode("utf-8", errors="replace")
@@ -121,8 +124,15 @@ def _request(method: str, url: str, body: dict | None, key: str) -> dict:
 
 
 def _call_minimax(prompt: str, ratio: str, resolution: str,
-                  duration: int, sound: bool, key: str) -> str:
-    """创建视频任务 → 轮询到完成 → 返回产物 file_url。"""
+                  duration: int, sound: bool, key: str,
+                  timeout: float) -> str:
+    """创建视频任务 → 轮询到完成 → 返回产物 file_url。
+
+    全局预算 deadline：提交 + 轮询共享同一份 timeout，避免各阶段各拿
+    一份、总耗时远超外壳强杀上限。提交接口实测响应需 30~48 秒，上限
+    给到 120 秒，仍受全局预算约束。
+    """
+    deadline = time.time() + timeout
     create_body: dict = {
         "model": MODEL_ID,
         "prompt": prompt,
@@ -136,18 +146,19 @@ def _call_minimax(prompt: str, ratio: str, resolution: str,
     if sound:
         create_body["generate_audio"] = True
     created = _request("POST", f"{API_BASE}/video_generation",
-                       create_body, key)
+                       create_body, key,
+                       min(120.0, max(1.0, deadline - time.time())))
     task_id = created.get("task_id") or created.get("video_id")
     if not task_id:
         raise RuntimeError(f"API_ERROR|创建任务失败：{created}")
 
-    deadline = time.time() + POLL_TIMEOUT
     while time.time() < deadline:
-        time.sleep(POLL_INTERVAL)
+        time.sleep(min(POLL_INTERVAL, max(0.1, deadline - time.time())))
         query = _request(
             "GET",
             f"{API_BASE}/video_generation/query/{task_id}?model={MODEL_ID}",
             None, key,
+            min(60.0, max(1.0, deadline - time.time())),
         )
         status = str(query.get("status", "")).lower()
         if status in ("succeed", "succeeded", "success"):
@@ -161,9 +172,9 @@ def _call_minimax(prompt: str, ratio: str, resolution: str,
     raise RuntimeError("TIMEOUT|视频任务轮询超时")
 
 
-def _download(url: str, dest: Path) -> None:
+def _download(url: str, dest: Path, timeout: float) -> None:
     req = urllib.request.Request(url, method="GET")
-    with urllib.request.urlopen(req, timeout=60) as resp:
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
         dest.write_bytes(resp.read())
 
 
@@ -196,6 +207,17 @@ def main() -> int:
     sound = bool(params.get("sound", False))
     mock = bool(params.get("mock", False))
 
+    # 总预算：提交 + 轮询 + 下载共享；由外壳下发，缺省 600 秒
+    timeout = DEFAULT_TIMEOUT
+    try:
+        if params.get("timeout") not in (None, ""):
+            timeout = float(params.get("timeout"))
+    except (TypeError, ValueError):
+        timeout = DEFAULT_TIMEOUT
+    if timeout <= 0:
+        timeout = DEFAULT_TIMEOUT
+    deadline = started + timeout
+
     try:
         output_dir.mkdir(parents=True, exist_ok=True)
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -211,9 +233,10 @@ def main() -> int:
                        "message": "API KEY 未配置（脚本内 API_KEY 或环境变量 MINIMAX_API_KEY）"})
                 return 1
             file_url = _call_minimax(prompt, ratio, resolution, duration,
-                                     sound, key)
+                                     sound, key,
+                                     max(1.0, deadline - time.time()))
             path = output_dir / f"minimax_{stamp}.mp4"
-            _download(file_url, path)
+            _download(file_url, path, max(1.0, deadline - time.time()))
             files = [str(path.resolve())]
 
         _emit({"status": "ok", "files": files,

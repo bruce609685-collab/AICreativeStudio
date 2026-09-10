@@ -11,7 +11,7 @@
 # need_image=false
 # seed=true
 # sound=false
-# pip_requires=none
+# pip_requires=
 # durations     = 2-15
 # [ACS_META_END]
 # 依赖安装：无（仅标准库）
@@ -181,7 +181,7 @@ def poll_task(headers, task_id, timeout):
         if remaining <= 0:
             break
         query_payload = {'model': MODEL_GET, 'input': task_id}
-        result = call_api(headers, query_payload, min(30.0, remaining))
+        result = call_api(headers, query_payload, min(60.0, remaining))
         inner = extract_inner_text(result)
         status = inner.get('task_status', '')
         if status == 'SUCCEEDED':
@@ -311,7 +311,10 @@ def run(params):
 
     task_id = params.get('task_id')
     headers = None
-    timeout = parse_timeout(params.get('timeout') or 300)
+    timeout = parse_timeout(params.get('timeout') or 600)
+    # 全局预算：提交 + 轮询 + 下载共享同一份 timeout，
+    # 避免各阶段各拿一份、总耗时远超外壳的强杀上限
+    deadline = start + timeout
 
     if not task_id:
         prompt = params.get('prompt')
@@ -338,8 +341,8 @@ def run(params):
             'Authorization': key,
         }
         payload = build_payload(str(prompt), negative_prompt, size, duration, mode, seed, sound)
-        # 初始提交用 30 秒短超时，不占用总超时
-        task_id = submit_task(headers, payload, min(30.0, timeout))
+        # 提交接口实测响应需 30~48 秒，上限给到 120 秒（仍受全局预算约束）
+        task_id = submit_task(headers, payload, min(120.0, max(1.0, deadline - time.time())))
 
     if headers is None:
         key = get_api_key()
@@ -350,9 +353,9 @@ def run(params):
             'Authorization': key,
         }
 
-    video_url = poll_task(headers, str(task_id), timeout)
+    video_url = poll_task(headers, str(task_id), max(1.0, deadline - time.time()))
     dest_path = os.path.join(output_dir, 'wan2.6_' + str(task_id) + '.mp4')
-    download_video(video_url, dest_path, timeout)
+    download_video(video_url, dest_path, max(1.0, deadline - time.time()))
     return {'files': [os.path.abspath(dest_path)], 'elapsed': round(time.time() - start, 3)}
 
 def main():

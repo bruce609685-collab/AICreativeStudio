@@ -288,7 +288,7 @@ def run(params):
         if seed < 0 or seed > 2147483647:
             raise ScriptError('INVALID_PARAMS', 'seed must be in [0, 2147483647]')
 
-    timeout = 300
+    timeout = 600
     if 'timeout' in params and params.get('timeout') not in (None, ''):
         try:
             timeout = float(params.get('timeout'))
@@ -326,17 +326,17 @@ def run(params):
         'parameters': parameters,
     }
 
-    # 初始提交用 30 秒短超时，不占用总超时
-    submit_timeout = min(30.0, timeout)
-    task_id = submit_task(payload, submit_timeout)
+    # 全局预算：提交 + 轮询 + 下载共享；提交接口实测需 30~48 秒，上限 120 秒
     deadline = time.time() + timeout
+    submit_timeout = min(120.0, max(1.0, deadline - time.time()))
+    task_id = submit_task(payload, submit_timeout)
 
     poll_interval = 3.0
     while True:
         remaining = deadline - time.time()
         if remaining <= 0:
             raise ScriptError('NETWORK', 'Task polling timeout')
-        inner = query_task(task_id, min(30.0, remaining))
+        inner = query_task(task_id, min(60.0, remaining))
         status = inner.get('task_status')
         if status == 'SUCCEEDED':
             video_url = inner.get('video_url')

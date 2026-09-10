@@ -121,7 +121,12 @@ class ImportPreviewDialog(QDialog):
         返回：条目 QFrame。
         """
         item = QFrame()
-        item.setStyleSheet("border:1px solid #d4d4d4; border-radius:1px;")
+        # 用 #objectName 限定作用域：否则该样式表会级联到内部所有子控件
+        # （徽标、文件名标签、依赖行都会各自多出一圈灰边框）。
+        item.setObjectName("previewItem")
+        item.setStyleSheet(
+            "#previewItem{border:1px solid #d4d4d4; border-radius:1px;}"
+        )
         wrap = QVBoxLayout(item)
         wrap.setContentsMargins(0, 0, 0, 0)
         wrap.setSpacing(0)

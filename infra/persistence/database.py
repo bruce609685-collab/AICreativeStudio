@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
 import time
 from pathlib import Path
 
@@ -59,12 +60,30 @@ class HistoryDatabase:
         """
         self._path = Path(db_path)
         self._path.parent.mkdir(parents=True, exist_ok=True)
-        self._conn = sqlite3.connect(str(self._path))
+        # check_same_thread=False：允许 QThread 后台线程复用同一连接；
+        # 配合下面的 _lock 串行化所有读写，避免 sqlite 并发写冲突
+        self._conn = sqlite3.connect(str(self._path), check_same_thread=False)
+        self._lock = threading.RLock()
         # row_factory=Row：查询结果可以用列名访问（如 row["prompt"]），
         # 比默认的按下标访问更不容易读错列
         self._conn.row_factory = sqlite3.Row
         self._conn.executescript(_SCHEMA)
         self._conn.commit()
+
+
+    # ------------------------------------------------------------------
+    # 线程安全包装
+    # ------------------------------------------------------------------
+
+    def _execute(self, sql: str, params=()):
+        """带锁执行一条 SQL（所有读写都从这里走，保证串行）。"""
+        with self._lock:
+            return self._conn.execute(sql, params)
+
+    def _commit(self) -> None:
+        """带锁提交。"""
+        with self._lock:
+            self._conn.commit()
 
     # ------------------------------------------------------------------
     # 写
@@ -90,7 +109,7 @@ class HistoryDatabase:
             raise ValueError(f"category 必须是 {CATEGORIES}，实际为 {category!r}")
         # dict/list 不能直接存进 SQLite，先用 json.dumps 转成文本；
         # `or {}` / `or []` 把 None 统一成空容器
-        cur = self._conn.execute(
+        cur = self._execute(
             "INSERT INTO history (ts, category, script_key, prompt, params,"
             " files, ok, code, message, elapsed) VALUES (?,?,?,?,?,?,?,?,?,?)",
             (
@@ -107,7 +126,7 @@ class HistoryDatabase:
             ),
         )
         # commit 把改动真正写进文件；不提交的话断电/崩溃会丢这条记录
-        self._conn.commit()
+        self._commit()
         return int(cur.lastrowid)
 
     # ------------------------------------------------------------------
@@ -131,7 +150,7 @@ class HistoryDatabase:
         # id 是自增的，所以按 id 倒序 = 按时间倒序
         sql += " ORDER BY id DESC LIMIT ?"
         args.append(max(1, int(limit)))  # 防止 limit 传 0 或负数导致 SQL 报错
-        rows = self._conn.execute(sql, args).fetchall()
+        rows = self._execute(sql, args).fetchall()
 
         # 逐行做"类型还原"：数据库里存的是文本/整数，这里转回
         # 界面需要的 dict / list / bool
@@ -156,10 +175,10 @@ class HistoryDatabase:
         返回值：满足条件的记录总数（整数）。
         """
         if category:
-            cur = self._conn.execute(
+            cur = self._execute(
                 "SELECT COUNT(*) FROM history WHERE category = ?", (category,))
         else:
-            cur = self._conn.execute("SELECT COUNT(*) FROM history")
+            cur = self._execute("SELECT COUNT(*) FROM history")
         # fetchone()[0]：COUNT 查询固定返回一行一列，取第一列即条数
         return int(cur.fetchone()[0])
 
@@ -174,11 +193,11 @@ class HistoryDatabase:
         返回值：实际删除的记录条数。
         """
         if category:
-            cur = self._conn.execute(
+            cur = self._execute(
                 "DELETE FROM history WHERE category = ?", (category,))
         else:
-            cur = self._conn.execute("DELETE FROM history")
-        self._conn.commit()
+            cur = self._execute("DELETE FROM history")
+        self._commit()
         # rowcount 是 DELETE/INSERT/UPDATE 影响的行数
         return int(cur.rowcount)
 

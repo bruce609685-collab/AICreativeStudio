@@ -54,8 +54,11 @@ class AudioPlayer(QWidget):
         self._file = ""   # 当前加载的产物文件路径
 
         box = QFrame()
+        # 用 #objectName 限定作用范围：不带选择器的样式表会级联到所有子控件，
+        # 把里面 class=primary 的"播放"按钮背景盖成浅灰，导致白字白底看不见。
+        box.setObjectName("audioBox")
         box.setStyleSheet(
-            "border:1px solid #d4d4d4; background:#f8f8f8; border-radius:1px;"
+            "#audioBox{border:1px solid #d4d4d4; background:#f8f8f8; border-radius:1px;}"
         )
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)

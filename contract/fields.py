@@ -15,6 +15,8 @@
 
 from __future__ import annotations
 
+import re
+
 # 模板版本：写进每个脚本头部，外壳据此做版本门闸
 # （版本不匹配时可以提示用户"脚本模板过旧/过新"）
 TEMPLATE_VERSION = "1.0.0"
@@ -49,6 +51,35 @@ ALL_FIELDS = BOOL_FIELDS | LIST_FIELDS | STR_FIELDS | INT_FIELDS
 # 解析时会校验脚本写的值是否在范围内，防止拼错的值混进系统
 CATEGORIES = {"image", "video", "audio"}
 FUNCTIONS = {"t2i", "i2i", "t2v", "i2v", "tts", "voice_design"}
+
+# pip 依赖字段的占位词：脚本作者想表达“无依赖”时常写成这些词，
+# 它们不是真实包名。若不清洗，界面会列出可点击的“假包”，
+# 点下去真的执行 pip install none，污染环境或直接报错。
+PIP_PLACEHOLDERS = {
+    "none", "null", "nil", "n/a", "na", "nan", "nothing",
+    "no", "-", "--", "无", "无依赖", "无需", "空", "不需要",
+}
+# pip 包名规则（PEP 508）：字母数字开头结尾，中间可含 . _ -
+PIP_NAME_RE = re.compile(r"^[A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?$")
+
+
+def normalize_pip_requires(items: list[str]) -> list[str]:
+    """清洗 pip 依赖列表：剔除占位词与不符合包名规则的脏值。
+
+    参数 items：原始字符串列表（META 里逗号拆分的产物）。
+    返回值：干净的包名列表（小写、去重、保持原顺序）。
+    """
+    seen: set[str] = set()
+    result: list[str] = []
+    for item in items:
+        name = item.strip().lower()
+        if not name or name in PIP_PLACEHOLDERS:
+            continue
+        if not PIP_NAME_RE.match(name) or name in seen:
+            continue
+        seen.add(name)
+        result.append(name)
+    return result
 
 
 class MetaParseError(ValueError):
@@ -98,7 +129,11 @@ def _parse_value(key: str, raw: str):
         raise MetaParseError(f"字段 {key} 必须是 true/false，实际为 {raw!r}")
     if key in LIST_FIELDS:
         # 列表字段按逗号拆分，并过滤掉空项（比如连续逗号、末尾逗号）
-        return [item.strip() for item in raw.split(",") if item.strip()]
+        items = [item.strip() for item in raw.split(",") if item.strip()]
+        # pip_requires 额外清洗：把 none 之类占位词与非法名挡在入口
+        if key == "pip_requires":
+            return normalize_pip_requires(items)
+        return items
     if key in INT_FIELDS:
         try:
             return int(raw)

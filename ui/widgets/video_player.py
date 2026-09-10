@@ -154,6 +154,16 @@ class VideoPlayer(QWidget):
         row.addWidget(self._ffplay_btn)
         outer.addWidget(bar)
 
+        # --- 文件名 / 状态提示条 ---
+        # 原来 _file_label 创建后从未加入任何布局，导致"内置播放不支持该格式"
+        # 这类关键提示根本显示不出来（用户只看到画面黑着，不知道可以点系统播放）。
+        # 现在挂在控制条下方，黑底浅字，与播放器整体风格一致。
+        self._file_label = QLabel("未加载产物")
+        self._file_label.setStyleSheet(
+            "color:#ffffff; font-size:10px; border:none; background:transparent;")
+        self._file_label.setContentsMargins(8, 3, 8, 5)
+        outer.addWidget(self._file_label)
+
         # --- 媒体播放核心对象 ---
         self._audio = QAudioOutput()
         self._audio.setVolume(0.8)
@@ -165,10 +175,6 @@ class VideoPlayer(QWidget):
         self._player.positionChanged.connect(self._on_position)
         self._player.durationChanged.connect(self._on_duration)
         self._player.errorOccurred.connect(self._on_error)
-
-        self._file_label = QLabel("未加载产物")
-        self._file_label.setStyleSheet(
-            "color:#ffffff; font-size:10px; border:none; background:transparent;")
 
     # ------------------------------------------------------------------
     # 公开接口（宿主页面调用）
@@ -249,12 +255,16 @@ class VideoPlayer(QWidget):
             self._player.play()
 
     def _on_state(self, state: QMediaPlayer.PlaybackState) -> None:
-        """播放状态变化 → 同步两个播放按钮的文字。"""
+        """播放状态变化 → 同步两个播放按钮的文字。
+
+        中央大按钮始终保持可见（播放中它是"暂停"按钮），
+        原写法 setVisible(not playing or True) 恒为 True，属无意义的死逻辑，
+        这里直接删除以免误导后续维护者。
+        """
         playing = state == QMediaPlayer.PlaybackState.PlayingState
         text = "⏸" if playing else "▶"
         self._play_btn.setText(text)
         self._big_btn.setText(text)
-        self._big_btn.setVisible(not playing or True)  # 播放中保留按钮可暂停
 
     def _on_position(self, pos_ms: int) -> None:
         """播放进度回填进度条与时间显示（拖动中不回填，避免打架）。"""

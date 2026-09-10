@@ -47,7 +47,12 @@ def load_llm_config(config_file: Path | str) -> LLMConfig:
         LLMConfig 对象；"llm" 键不存在时返回各字段的默认值。
     """
     data = _read_all(config_file).get(_LLM_KEY) or {}
-    return LLMConfig(**data)
+    if not isinstance(data, dict):
+        return LLMConfig()
+    # 只挑 LLMConfig 认识的键，手改 config.json 多写了字段（或旧版本
+    # 遗留键）也不会让程序启动崩溃
+    known = LLMConfig.__dataclass_fields__
+    return LLMConfig(**{k: v for k, v in data.items() if k in known})
 
 
 def save_llm_config(config_file: Path | str, cfg: LLMConfig) -> None:

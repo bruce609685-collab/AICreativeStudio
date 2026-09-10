@@ -26,9 +26,15 @@ WARN_TEXT = "#e65100"     # 警告条文字（橙）
 OK_GREEN = "#2e7d32"      # 成功/已填写（绿）
 FAIL_RED = "#d32f2f"      # 失败/危险操作（红）
 
+# 字体回退链：中英文用微软雅黑，符号/emoji 交给 Windows 自带的两款符号字体。
+# 只写 "Microsoft YaHei UI" 时，Qt 对 🖼 ⚙ ℹ ✨ ▶ 这类符号的回退不稳定，
+# 页签和按钮上会出现空心方块（豆腐块）；把符号字体显式列进来即可解决。
+_FONT_STACK = ('"Microsoft YaHei UI", "Segoe UI", "Segoe UI Emoji", '
+               '"Segoe UI Symbol", sans-serif')
+
 _QSS = f"""
 * {{
-    font-family: "Microsoft YaHei UI", "Segoe UI", sans-serif;
+    font-family: {_FONT_STACK};
     font-size: 13px;
     color: {TEXT_MAIN};
 }}
@@ -195,12 +201,191 @@ QCheckBox::indicator {{
     width: 14px;
     height: 14px;
     border: 1px solid #b0b0b0;
+    border-radius: 2px;
     background: #ffffff;
+}}
+QCheckBox::indicator:hover {{
+    border-color: {BLUE};
 }}
 QCheckBox::indicator:checked {{
     border-color: {BLUE};
     background: {BLUE};
-    image: none;
+    /* 勾选态画一个白色对勾：原实现只填充蓝底没有对勾，远看像"半选" */
+    image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M2.5 6.2l2.4 2.4 4.6-5' stroke='white' stroke-width='1.8' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+}}
+QCheckBox::indicator:disabled {{
+    border-color: #d0d0d0;
+    background: #f0f0f0;
+}}
+
+/* ---------- 滚动条（统一浅色风格，替代系统默认的深灰粗条） ---------- */
+QScrollBar:vertical {{
+    background: transparent;
+    width: 10px;
+    margin: 0px;
+}}
+QScrollBar::handle:vertical {{
+    background: #c8c8c8;
+    border-radius: 5px;
+    min-height: 28px;
+}}
+QScrollBar::handle:vertical:hover {{
+    background: #a8a8a8;
+}}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+    height: 0px;
+}}
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
+    background: transparent;
+}}
+QScrollBar:horizontal {{
+    background: transparent;
+    height: 10px;
+    margin: 0px;
+}}
+QScrollBar::handle:horizontal {{
+    background: #c8c8c8;
+    border-radius: 5px;
+    min-width: 28px;
+}}
+QScrollBar::handle:horizontal:hover {{
+    background: #a8a8a8;
+}}
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
+    width: 0px;
+}}
+QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {{
+    background: transparent;
+}}
+
+/* ---------- 进度条（还原 .gen-progress：浅蓝底 + 主蓝进度） ---------- */
+QProgressBar {{
+    border: 1px solid #b3d9f7;
+    border-radius: 1px;
+    background: #f0f7ff;
+    text-align: center;
+    font-size: 11px;
+    color: {TEXT_SUB};
+ min-height: 14px;
+    max-height: 16px;
+}}
+QProgressBar::chunk {{
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+            stop:0 #2b8ee0, stop:1 {BLUE});
+    border-radius: 0px;
+}}
+
+/* ---------- 滑块（播放器进度 / 音量，主蓝圆钮） ---------- */
+QSlider::groove:horizontal {{
+    height: 4px;
+    background: #dcdcdc;
+    border-radius: 2px;
+}}
+QSlider::sub-page:horizontal {{
+    background: {BLUE};
+    border-radius: 2px;
+}}
+QSlider::handle:horizontal {{
+    width: 12px;
+    height: 12px;
+    margin: -4px 0;
+    border-radius: 6px;
+    background: #ffffff;
+    border: 2px solid {BLUE};
+}}
+QSlider::handle:horizontal:hover {{
+    background: {BLUE_HOVER_BG};
+}}
+QSlider::handle:horizontal:disabled {{
+    border-color: #b0b0b0;
+}}
+QSlider::sub-page:horizontal:disabled {{
+    background: #b0b0b0;
+}}
+
+/* ---------- 工具提示（浅色，替代系统黑底黄字/深色默认） ---------- */
+QToolTip {{
+    background: #ffffff;
+  color: {TEXT_MAIN};
+    border: 1px solid {GRAY_BORDER};
+    padding: 4px 8px;
+    font-size: 12px;
+}}
+
+/* ---------- 分隔条（设置页左右分栏） ---------- */
+QSplitter::handle {{
+    background: #e6e6e6;
+}}
+QSplitter::handle:horizontal {{
+    width: 3px;
+}}
+QSplitter::handle:vertical {{
+    height: 3px;
+}}
+QSplitter::handle:hover {{
+    background: {BLUE};
+}}
+
+/* ---------- 右键菜单（输入框复制/粘贴等） ---------- */
+QMenu {{
+    background: #ffffff;
+    border: 1px solid {GRAY_BORDER};
+  padding: 4px 0;
+}}
+QMenu::item {{
+    padding: 5px 24px 5px 16px;
+    color: {TEXT_MAIN};
+}}
+QMenu::item:selected {{
+    background: {BLUE_HOVER_BG};
+    color: {BLUE};
+}}
+QMenu::item:disabled {{
+  color: #999999;
+}}
+QMenu::separator {{
+    height: 1px;
+  background: #e6e6e6;
+    margin: 4px 8px;
+}}
+
+/* ---------- 列表 / 树（设置页脚本列表） ---------- */
+QListWidget, QTreeWidget, QListView, QTreeView {{
+    border: 1px solid {GRAY_BORDER};
+    background: #ffffff;
+    outline: none;
+}}
+QListWidget::item, QTreeWidget::item, QListView::item, QTreeView::item {{
+    padding: 4px 6px;
+}}
+QListWidget::item:hover, QTreeWidget::item:hover,
+QListView::item:hover, QTreeView::item:hover {{
+ background: #f3f8fd;
+}}
+QListWidget::item:selected, QTreeWidget::item:selected,
+QListView::item:selected, QTreeView::item:selected {{
+    background: {BLUE_HOVER_BG};
+    color: {BLUE};
+}}
+
+/* ---------- 单选框（与复选框同风格） ---------- */
+QRadioButton {{
+    font-size: 12px;
+    spacing: 6px;
+}}
+QRadioButton::indicator {{
+    width: 14px;
+    height: 14px;
+    border: 1px solid #b0b0b0;
+    border-radius: 7px;
+    background: #ffffff;
+}}
+QRadioButton::indicator:hover {{
+border-color: {BLUE};
+}}
+QRadioButton::indicator:checked {{
+    border: 4px solid {BLUE};
+    background: #ffffff;
 }}
 """
 
@@ -222,10 +407,14 @@ def _setup_fonts(app: QApplication) -> None:
     ):
         if os.path.exists(path):
             QFontDatabase.addApplicationFont(path)
-    # 注册 emoji 字体（页签图标 🖼🎬 等）
+    # 注册符号/emoji 字体（页签与按钮上的 🖼🎬⚙ℹ✨▶ 等）
+    # seguiemj=彩色 emoji；seguisym=几何符号。两款都要注册——
+    # 少了 seguisym，⚙ ℹ ▶ ⏮ ⏭ 这类符号在部分系统上仍会变方块。
     for path in (
-        r"C:\Windows\Fonts\seguiemj.ttf",   # Segoe UI Emoji（页签图标）
+        r"C:\Windows\Fonts\seguiemj.ttf",   # Segoe UI Emoji
         r"C:\Windows\Fonts\seguiemj2.ttf",
+        r"C:\Windows\Fonts\seguisym.ttf",   # Segoe UI Symbol
+        r"C:\Windows\Fonts\seguisym2.ttf",
     ):
         if os.path.exists(path):
             QFontDatabase.addApplicationFont(path)

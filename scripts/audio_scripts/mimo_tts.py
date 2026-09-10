@@ -7,6 +7,8 @@
 - 同步调用（POST 直接返回音频），OpenAI 兼容接口
 - mock=true 时不发起网络请求，用 wave 标准库产真实 WAV（正弦包络语音占位）
 - KEY 优先级：脚本内 API_KEY 常量 → 环境变量 MIMO_API_KEY
+- 超时：timeout 是"整个任务总预算"，由外壳下发；严禁给单次请求设
+  远小于总预算的硬性上限（例如写死 timeout=30）
 - 真实接口字段以小米 MiMo 开放平台官方文档为准（本脚本为 OpenAI 兼容骨架）
 
 # [ACS_META_START]
@@ -81,7 +83,8 @@ def _resolve_key() -> str:
     return os.environ.get("MIMO_API_KEY", "").strip()
 
 
-def _call_mimo(text: str, voice: str, format_: str, key: str) -> bytes:
+def _call_mimo(text: str, voice: str, format_: str, key: str,
+               timeout: float) -> bytes:
     body = {
         "model": MODEL_ID,
         "messages": [
@@ -98,7 +101,7 @@ def _call_mimo(text: str, voice: str, format_: str, key: str) -> bytes:
         method="POST",
     )
     try:
-        with urllib.request.urlopen(req, timeout=60) as resp:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
             data = json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         raw = exc.read().decode("utf-8", errors="replace")
@@ -146,6 +149,16 @@ def main() -> int:
     format_ = str(params.get("format", "wav")).strip().lower() or "wav"
     mock = bool(params.get("mock", False))
 
+    # 请求超时：由外壳按任务总预算下发，缺省 300 秒
+    timeout = 300.0
+    try:
+        if params.get("timeout") not in (None, ""):
+            timeout = float(params.get("timeout"))
+    except (TypeError, ValueError):
+        timeout = 300.0
+    if timeout <= 0:
+        timeout = 300.0
+
     try:
         output_dir.mkdir(parents=True, exist_ok=True)
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -161,7 +174,7 @@ def main() -> int:
                 _emit({"status": "error", "code": "AUTH_FAILED",
                        "message": "API KEY 未配置（脚本内 API_KEY 或环境变量 MIMO_API_KEY）"})
                 return 1
-            audio_bytes = _call_mimo(text, voice, format_, key)
+            audio_bytes = _call_mimo(text, voice, format_, key, timeout)
             path = output_dir / f"mimo_{stamp}.{ext}"
             path.write_bytes(audio_bytes)
             files = [str(path.resolve())]

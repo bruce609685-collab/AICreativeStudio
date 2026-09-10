@@ -154,7 +154,7 @@ def build_video_params(
     sound: bool = False,
     mock: bool = False,
     ref_image: str | None = None,
-    timeout: int = 300,
+    timeout: int = 600,
 ) -> dict:
     """组装生视频任务参数字典（视频类：一次一条，异步任务协议见契约）。
 
@@ -171,7 +171,7 @@ def build_video_params(
         seed: 种子字符串，默认 "-1"（随机）。
         sound: 是否生成带声音的视频。
         mock: True 走 mock 分支。ref_image: 参考图路径（图生视频）。
-        timeout: 超时秒数。
+        timeout: 超时预算秒数。视频生成耗时长，默认 600 秒。
 
     Returns:
         参数字典（键为 contract.params 常量）。

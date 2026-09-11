@@ -71,7 +71,7 @@ AICreativeStudio/
 ├── domain/          # 数据模型
 ├── tests/           # 自动化测试（88 项）
 ├── docs/            # 界面截图（README 里用到）
-└── packaging/       # 打包成 exe 用的配置和收尾脚本
+└── packaging/       # 打包成 exe 用的配置，以及整理发布包的小脚本
 ```
 
 ## 🛠 技术栈
